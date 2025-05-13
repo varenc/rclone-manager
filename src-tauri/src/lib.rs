@@ -160,6 +160,8 @@ async fn async_startup(app_handle: tauri::AppHandle, settings: AppSettings) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    println!("Starting rclone-manager application");
+
     tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -171,36 +173,49 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .on_window_event(move |window, event| match event {
-            WindowEvent::CloseRequested { api, .. } => {
-                window.hide().unwrap_or_else(|e| {
-                    eprintln!("Failed to hide window: {}", e);
-                });
-                if *window.app_handle().state::<TrayEnabled>().enabled.clone().read().unwrap() {
-                    api.prevent_close();
-                    if let Some(win) = window.app_handle().get_webview_window("main") {
-                        win.eval("document.body.innerHTML = '';")
-                            .unwrap_or_else(|e| {
-                                eprintln!("Failed to clear window content: {}", e);
-                            });
+        .on_window_event(move |window, event| {
+            println!("Window event: {:?}", event);
 
-                        // When windows are closed, the "main" label is still exist?
-                        // win.close().unwrap_or_else(|e| {
-                        //     eprintln!("Failed to close window: {}", e);
-                        // });
-                    }
-                } else {
-                    tauri::async_runtime::block_on(handle_shutdown(window.app_handle().clone()));
-                }
-            }
-            WindowEvent::Focused(true) => {
-                if let Some(win) = window.app_handle().get_webview_window("main") {
-                    win.show().unwrap_or_else(|e| {
-                        eprintln!("Failed to show window: {}", e);
+            match event {
+                WindowEvent::CloseRequested { api, .. } => {
+                    println!("Window close requested");
+                    window.hide().unwrap_or_else(|e| {
+                        eprintln!("Failed to hide window: {}", e);
                     });
+
+                    let tray_enabled = match window.app_handle().state::<TrayEnabled>().enabled.clone().read() {
+                        Ok(enabled) => *enabled,
+                        Err(e) => {
+                            eprintln!("Failed to read tray enabled state: {}", e);
+                            false
+                        }
+                    };
+
+                    if tray_enabled {
+                        println!("Tray is enabled, preventing window close");
+                        api.prevent_close();
+                        if let Some(win) = window.app_handle().get_webview_window("main") {
+                            println!("Clearing window content");
+                            win.eval("document.body.innerHTML = '';")
+                                .unwrap_or_else(|e| {
+                                    eprintln!("Failed to clear window content: {}", e);
+                                });
+                        }
+                    } else {
+                        println!("Tray is disabled, shutting down application");
+                        tauri::async_runtime::block_on(handle_shutdown(window.app_handle().clone()));
+                    }
                 }
+                WindowEvent::Focused(true) => {
+                    println!("Window focused, ensuring it's visible");
+                    if let Some(win) = window.app_handle().get_webview_window("main") {
+                        win.show().unwrap_or_else(|e| {
+                            eprintln!("Failed to show window: {}", e);
+                        });
+                    }
+                }
+                _ => {}
             }
-            _ => {}
         })
         .manage(RcloneState {
             client: reqwest::Client::new(),

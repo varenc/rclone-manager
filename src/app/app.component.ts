@@ -46,6 +46,11 @@ export class AppComponent {
     this.isMobile$ = this.stateService.isMobile$;
   }
 
+  ngOnDestroy() {
+    // Ensure all event listeners are cleaned up when the component is destroyed
+    this.stateService.cleanup();
+  }
+
   private async checkOnboardingStatus(): Promise<void> {
     this.completedOnboarding =
       (await this.settingsService.load_setting_value(
@@ -60,24 +65,41 @@ export class AppComponent {
   }
 
   private listenForErrors() {
-    listen<string>("rclone_path_invalid", () => {
-      if (this.alreadyReported) {
-        return;
+    // Use our optimized event listener pattern
+    const unlistenError = listen<string>("rclone_path_invalid", () => {
+      // Use requestAnimationFrame to batch UI updates
+      requestAnimationFrame(() => {
+        if (this.alreadyReported) {
+          return;
+        }
+        this.alreadyReported = true;
+        const sheetRef = this.bottomSheet.open(RepairSheetComponent, {
+          data: {
+            type: "rclone_path",
+            title: "Rclone Path Problem",
+            message:
+              "The Rclone binary could not be found or started. You can reinstall it now.",
+          },
+          disableClose: true,
+        });
+
+        // Nested listener
+        const unlistenReady = listen("rclone_api_ready", () => {
+          requestAnimationFrame(() => {
+            this.alreadyReported = false;
+            sheetRef.dismiss();
+            // Clean up this nested listener when it's triggered
+            unlistenReady.then(unlisten => unlisten());
+          });
+        });
+      });
+    });
+
+    // Store the unlisten function for cleanup
+    unlistenError.then(unlisten => {
+      if (this.stateService['_unlistenFunctions']) {
+        this.stateService['_unlistenFunctions'].push(unlisten);
       }
-      this.alreadyReported = true;
-      const sheetRef = this.bottomSheet.open(RepairSheetComponent, {
-        data: {
-          type: "rclone_path",
-          title: "Rclone Path Problem",
-          message:
-            "The Rclone binary could not be found or started. You can reinstall it now.",
-        },
-        disableClose: true,
-      });
-      listen("rclone_api_ready", () => {
-        this.alreadyReported = false;
-        sheetRef.dismiss();
-      });
     });
   }
 

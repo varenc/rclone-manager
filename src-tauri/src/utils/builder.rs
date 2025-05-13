@@ -1,4 +1,4 @@
-use tauri::{image::Image, tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}, AppHandle, Emitter};
+use tauri::{image::Image, tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}, AppHandle, Emitter, Manager};
 
 use crate::core::tray::{actions::show_main_window, menu::create_tray_menu};
 
@@ -46,8 +46,24 @@ pub async fn setup_tray(
     Ok(())
 }
 
+// Stripped down window creation function with minimal styling and no vibrancy or transparency
 pub fn create_app_window(app_handle: AppHandle) {
-    let main_window = tauri::WebviewWindowBuilder::new(
+    println!("Creating window with basic settings for macOS stability");
+
+    // Check if window already exists
+    if let Some(window) = app_handle.get_webview_window("main") {
+        println!("Window 'main' already exists, focusing and showing it");
+        window.set_focus().unwrap_or_else(|e| {
+            eprintln!("Failed to focus window: {}", e);
+        });
+        window.show().unwrap_or_else(|e| {
+            eprintln!("Failed to show window: {}", e);
+        });
+        return;
+    }
+
+    // Create a basic window with minimal styling
+    let main_window = match tauri::WebviewWindowBuilder::new(
         &app_handle,
         "main",
         tauri::WebviewUrl::App("index.html".into()),
@@ -55,15 +71,22 @@ pub fn create_app_window(app_handle: AppHandle) {
     .title("Rclone Manager")
     .inner_size(800.0, 630.0)
     .resizable(true)
-    .decorations(false)
-    .transparent(true)
+    // No decorations, transparency, or other problematic properties
     .center()
-    .shadow(false)
     .min_inner_size(362.0, 240.0)
-    .build()
-    .expect("Failed to create main window");
+    .build() {
+        Ok(window) => window,
+        Err(e) => {
+            eprintln!("Failed to create main window: {}", e);
+            return;
+        }
+    };
+
+    println!("Window created successfully, showing window");
 
     main_window.show().unwrap_or_else(|e| {
         eprintln!("Failed to show main window: {}", e);
     });
+
+    println!("Window showing complete");
 }

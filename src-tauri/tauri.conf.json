@@ -12,11 +12,18 @@
   "app": {
     "security": {
       "csp": null
-    }
+    },
+    "windows": [
+      {
+        "fullscreen": false,
+        "resizable": true,
+        "title": "RClone Manager"
+      }
+    ]
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi", "deb", "rpm", "appimage"],
+    "targets": ["nsis", "msi", "deb", "rpm", "appimage", "app"],
     "category": "utility",
     "shortDescription": "User-friendly GUI for RClone",
     "longDescription": "RClone Manager is a user-friendly GUI for RClone, designed to simplify the process of managing and transferring files across various cloud storage services. With its intuitive interface, users can easily configure and execute Rclone commands without needing extensive technical knowledge.",
@@ -46,6 +53,13 @@
         "startMenuFolder": "RClone Manager",
         "compression": "lzma"
       }
+    },
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "10.13",
+      "exceptionDomain": "",
+      "signingIdentity": null,
+      "entitlements": null
     },
     "icon": [
       "icons/32x32.png",

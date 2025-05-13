@@ -49,15 +49,27 @@ export class StateService {
   private appWindow = getCurrentWindow();
 
   constructor(private rcloneService: RcloneService, private ngZone: NgZone) {
-    this.initializeWindowListeners();
-    this.updateViewportSettings();
-    this.setupRemoteDeletionListener();
+    console.log("Initializing StateService with limited event listeners for macOS compatibility");
 
+    // Only set up simplified window listeners for macOS
+    this.updateViewportSettings();
+
+    // Use a throttled event listener for resize events
+    let resizeTimeout: any;
     window.addEventListener("resize", () => {
-      this.ngZone.run(() => {
-        this._isMobile.next(window.innerWidth <= 600);
-        this.updateViewportSettings();
-      });
+      // Cancel previous timeout
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+
+      // Schedule a new update after a delay (debouncing)
+      resizeTimeout = setTimeout(() => {
+        this.ngZone.run(() => {
+          console.log("Window resized, updating UI");
+          this._isMobile.next(window.innerWidth <= 600);
+          this.updateViewportSettings();
+        });
+      }, 250); // 250ms throttle
     });
   }
 
@@ -68,41 +80,20 @@ export class StateService {
   } | null>(null);
   showToast$ = this._showToast$.asObservable();
 
-  // Update the deletion listener
+  // Remote deletion listener disabled for better stability on macOS
   private async setupRemoteDeletionListener() {
-    try {
-      await listen<string>("remote_deleted", (event) => {
-        this.ngZone.run(() => {
-          const deletedRemoteName = event.payload;
-          const currentRemote = this.selectedRemoteSource.value;
-
-          if (currentRemote?.remoteSpecs?.name === deletedRemoteName) {
-            this.resetSelectedRemote();
-            this._showToast$.next({
-              message: `Remote ${deletedRemoteName} deleted`,
-              type: "success",
-            });
-          }
-        });
-      });
-    } catch (error) {
-      console.warn("Failed to setup remote deletion listener:", error);
-    }
+    console.log("Remote deletion listener disabled for macOS compatibility");
+    // Not setting up any listeners for better stability
   }
 
+  // Disabled window event listeners for better stability on macOS
   private async initializeWindowListeners() {
+    console.log("Window event listeners disabled for macOS compatibility");
     try {
-      // Listen for window maximize/unmaximize events
-      await listen("tauri://resize", () => {
-        this.ngZone.run(() => {
-          this.updateWindowState();
-        });
-      });
-
-      // Initial check
+      // Just do a single initial check without any event listeners
       await this.updateWindowState();
     } catch (error) {
-      console.warn("Tauri window events not available:", error);
+      console.warn("Error in window state check:", error);
     }
   }
 
@@ -170,6 +161,9 @@ export class StateService {
   private _isAuthCancelled$ = new BehaviorSubject<boolean>(false);
   private _isEditMode$ = new BehaviorSubject<boolean>(false);
   private _cleanupInProgress$ = new BehaviorSubject<boolean>(false);
+
+  // Store unlisten functions to properly clean up event listeners
+  private _unlistenFunctions: Array<() => void> = [];
 
   isAuthInProgress$ = this._isAuthInProgress$.asObservable();
   isAuthCancelled$ = this._isAuthCancelled$.asObservable();
@@ -246,5 +240,13 @@ export class StateService {
     this._isAuthCancelled$.next(false);
     this._isEditMode$.next(false);
     console.log("Auth state reset");
+  }
+
+  // This method should be called when the component is destroyed
+  // to properly clean up all event listeners
+  cleanup(): void {
+    console.log("Cleaning up event listeners");
+    this._unlistenFunctions.forEach(unlisten => unlisten());
+    this._unlistenFunctions = [];
   }
 }
